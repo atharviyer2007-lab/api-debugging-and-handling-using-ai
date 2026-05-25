@@ -3,7 +3,7 @@ const API = 'http://127.0.0.1:5000';
 // ─── OpenRouter Key (works on GitHub, free) ────────────────────────
 // Get free key at https://openrouter.ai → API Keys
 // Paste your key below (starts with sk-or-v1-...)
-const OPENROUTER_KEY = 'sk-or-v1-bfc96cf9d396fe38600381cddadfb278a847eeca2bf37e78a64b29fe1ba17cd';
+const OPENROUTER_KEY = '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';
 
 // ─── State ─────────────────────────────────────────────────────────
 let latencyHistory  = Array.from({length:20}, () => Math.floor(Math.random()*30)+10);
@@ -926,75 +926,43 @@ async function sendChat() {
 
   input.value = '';
   autoResize(input);
-
   appendMsg('user', text);
   chatHistory.push({ role: 'user', content: text });
-
   setChatBusy(true);
   const typingEl = appendMsg('ai', '', true);
 
   try {
     const systemPrompt = getCurrentContext();
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + OPENROUTER_KEY,
+        'HTTP-Referer': window.location.href,
+        'X-Title': 'NeuralOps'
+      },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-3.3-70b-instruct:free',
+        max_tokens: 1000,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...chatHistory.slice(-9, -1),
+          { role: 'user', content: text }
+        ]
+      }),
+      signal: AbortSignal.timeout(30000)
+    });
 
-    const usingOpenRouter = OPENROUTER_KEY && OPENROUTER_KEY !== 'PASTE_YOUR_OPENROUTER_KEY_HERE';
-
-    let reply;
-
-    if (usingOpenRouter) {
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENROUTER_KEY}`,
-          'HTTP-Referer': window.location.href,
-          'X-Title': 'NeuralOps'
-        },
-        body: JSON.stringify({
-          model: 'meta-llama/llama-3.3-70b-instruct:free',
-          max_tokens: 1000,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...chatHistory.slice(-10, -1)
-          ]
-        }),
-        signal: AbortSignal.timeout(30000)
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
-      reply = data.choices?.[0]?.message?.content || 'No response received.';
-
-    } else {
-      // Fallback: try local Flask backend
-      const res = await fetch(`${API}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: text,
-          system: systemPrompt,
-          history: chatHistory.slice(-10, -1)
-        }),
-        signal: AbortSignal.timeout(30000)
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      reply = data.reply || 'No response received.';
-    }
-
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || 'HTTP ' + res.status);
+    const reply = data.choices?.[0]?.message?.content || 'No response.';
     chatHistory.push({ role: 'assistant', content: reply });
     if (typingEl) typingEl.remove();
     appendMsg('ai', reply);
 
   } catch (e) {
     if (typingEl) typingEl.remove();
-    appendMsg('ai',
-      `**Setup needed — choose one option:**\n\n` +
-      `**Option 1 — Works on GitHub (free):**\n` +
-      `Get a free key at [openrouter.ai](https://openrouter.ai) → API Keys\n` +
-      `Then paste it in script.js line that says \`PASTE_YOUR_OPENROUTER_KEY_HERE\`\n\n` +
-      `**Option 2 — Local only:**\n` +
-      `Run \`python app.py\` with your Groq key set\n\n` +
-      `_Error: ${e.message}_`
-    );
+    appendMsg('ai', '**Error:** ' + e.message + '\n\nMake sure your OpenRouter key is pasted on line 6 of script.js');
   }
 
   setChatBusy(false);
