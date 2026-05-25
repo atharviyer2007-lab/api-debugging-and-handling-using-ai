@@ -1,9 +1,8 @@
 const API = 'http://127.0.0.1:5000';
 
-// ─── OpenRouter Key (works on GitHub, free) ────────────────────────
-// Get free key at https://openrouter.ai → API Keys
-// Paste your key below (starts with sk-or-v1-...)
-const OPENROUTER_KEY = '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';
+// ─── Gemini Key (works on GitHub, 100% free, no credit card) ───────
+// Get free key at https://aistudio.google.com → Get API Key
+const GEMINI_KEY = 'AIzaSyCMqHGdCwRmNvYZecddFspALU9FJrngzTo';
 
 // ─── State ─────────────────────────────────────────────────────────
 let latencyHistory  = Array.from({length:20}, () => Math.floor(Math.random()*30)+10);
@@ -933,36 +932,40 @@ async function sendChat() {
 
   try {
     const systemPrompt = getCurrentContext();
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+
+    // Build conversation for Gemini
+    const geminiMsgs = [];
+    const hist = chatHistory.slice(-10, -1);
+    for (const m of hist) {
+      geminiMsgs.push({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }]
+      });
+    }
+    geminiMsgs.push({ role: 'user', parts: [{ text: text }] });
+
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + GEMINI_KEY;
+    const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + OPENROUTER_KEY,
-        'HTTP-Referer': window.location.href,
-        'X-Title': 'NeuralOps'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'meta-llama/llama-3.3-70b-instruct:free',
-        max_tokens: 1000,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...chatHistory.slice(-9, -1),
-          { role: 'user', content: text }
-        ]
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents: geminiMsgs,
+        generationConfig: { maxOutputTokens: 1000 }
       }),
       signal: AbortSignal.timeout(30000)
     });
 
     const data = await res.json();
     if (!res.ok) throw new Error(data.error?.message || 'HTTP ' + res.status);
-    const reply = data.choices?.[0]?.message?.content || 'No response.';
+    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response.';
     chatHistory.push({ role: 'assistant', content: reply });
     if (typingEl) typingEl.remove();
     appendMsg('ai', reply);
 
   } catch (e) {
     if (typingEl) typingEl.remove();
-    appendMsg('ai', '**Error:** ' + e.message + '\n\nMake sure your OpenRouter key is pasted on line 6 of script.js');
+    appendMsg('ai', '**Error:** ' + e.message + '\n\nMake sure your Gemini key is pasted on line 6 of script.js\nGet free key at https://aistudio.google.com');
   }
 
   setChatBusy(false);
