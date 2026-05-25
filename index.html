@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NeuralOps v2 — API Failure Detection Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,500;0,9..40,700;1,9..40,300&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<!-- HELP MODAL -->
+<div class="modal-overlay" id="helpModal" onclick="closeHelp(event)">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title"><span class="modal-title-icon">◎</span> NeuralOps Reference</div>
+      <button class="modal-close" onclick="closeHelpDirect()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div>
+        <div class="help-section-title">Workflow — How to Use</div>
+        <div class="help-flow">
+          <div class="help-flow-step"><div class="flow-num">1</div><div class="flow-info"><div class="flow-title">Pick a failure scenario</div><div class="flow-desc">Click the scenario selector in the toolbar — choose Deployment Regression, DB Overload, or Memory Leak. Each scenario simulates a distinct real-world failure pattern with its own log signatures and service impact.</div></div></div>
+          <div class="help-flow-step"><div class="flow-num">2</div><div class="flow-info"><div class="flow-title">Inject the failure</div><div class="flow-desc">Click <strong style="color:var(--yellow)">⚡ Simulate</strong>. Services degrade, error rates spike, incident timeline activates. Compare against the SLA baseline in the charts.</div></div></div>
+          <div class="help-flow-step"><div class="flow-num">3</div><div class="flow-info"><div class="flow-title">Run AI root-cause analysis</div><div class="flow-desc">Click <strong style="color:var(--accent-blue)">🧠 Analyze</strong>. The agent sequentially calls 5 MCP-style tools, correlates signals, and returns a root cause, technical explanation, and remediation plan.</div></div></div>
+          <div class="help-flow-step"><div class="flow-num">4</div><div class="flow-info"><div class="flow-title">Toggle dark / light mode</div><div class="flow-desc">Use the <strong>☀ / ◐</strong> button in the top-right. Preferences are saved to localStorage across sessions.</div></div></div>
+        </div>
+      </div>
+      <div>
+        <div class="help-section-title">MCP-Style Agent Tools</div>
+        <div class="help-grid">
+          <div class="help-card"><div class="help-card-title">get_logs()</div><div class="help-card-desc">Collects recent log entries (INFO/WARN/ERROR/DEBUG/CRITICAL) from the active log pool. Pool switches on failure injection.</div></div>
+          <div class="help-card"><div class="help-card-title">get_metrics()</div><div class="help-card-desc">Fetches live metrics — avg latency, error rate, uptime, req/min, per-service health. Also appends to rolling 60-point history.</div></div>
+          <div class="help-card"><div class="help-card-title">get_deployments()</div><div class="help-card-desc">Returns last 5 deployments: service, version, commit hash, author, status, environment.</div></div>
+          <div class="help-card"><div class="help-card-title">detect_anomaly()</div><div class="help-card-desc">Analyses metrics + logs. Fires when error_rate > threshold OR latency > SLA. Returns signals and pattern fingerprint.</div></div>
+          <div class="help-card"><div class="help-card-title">analyze_incident()</div><div class="help-card-desc">Correlates anomaly with scenario-specific root cause knowledge. Generates root cause, technical explanation, severity, and step-by-step fix.</div></div>
+          <div class="help-card"><div class="help-card-title">get_history() <span style="color:var(--accent-blue);font-size:9px">NEW</span></div><div class="help-card-desc">Returns rolling 60-point metrics history for SLA comparison overlays on the charts.</div></div>
+        </div>
+      </div>
+      <div>
+        <div class="help-section-title">Failure Scenarios (v2 NEW)</div>
+        <div class="help-grid">
+          <div class="help-card"><div class="help-card-title">Deployment Regression</div><div class="help-card-desc">HikariCP pool misconfiguration in payments-api. Exhausts DB connections under load, cascades to circuit breaker trip.</div></div>
+          <div class="help-card"><div class="help-card-title">DB Overload</div><div class="help-card-desc">Missing index on transactions table. Full table scans push db-primary CPU to 98%, cascading to auth and payments services.</div></div>
+          <div class="help-card"><div class="help-card-title">Memory Leak</div><div class="help-card-desc">Unbounded JWT session cache in auth-service v4.3.0. Heap grows until OOM, triggering CrashLoopBackOff rolling restarts.</div></div>
+        </div>
+      </div>
+      <div>
+        <div class="help-section-title">Keyboard Shortcuts</div>
+        <div class="help-shortcuts">
+          <div class="shortcut-item"><span class="shortcut-key">S</span><span class="shortcut-desc">Simulate failure</span></div>
+          <div class="shortcut-item"><span class="shortcut-key">A</span><span class="shortcut-desc">Analyze incident</span></div>
+          <div class="shortcut-item"><span class="shortcut-key">R</span><span class="shortcut-desc">Resolve incident</span></div>
+          <div class="shortcut-item"><span class="shortcut-key">H</span><span class="shortcut-desc">Open help</span></div>
+          <div class="shortcut-item"><span class="shortcut-key">T</span><span class="shortcut-desc">Toggle theme</span></div>
+          <div class="shortcut-item"><span class="shortcut-key">Esc</span><span class="shortcut-desc">Close modal</span></div>
+          <div class="shortcut-item"><span class="shortcut-key">1–3</span><span class="shortcut-desc">Filter logs</span></div>
+          <div class="shortcut-item"><span class="shortcut-key">Tab</span><span class="shortcut-desc">Switch chart tab</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="help-section-title">Backend API Endpoints</div>
+        <div class="help-grid">
+          <div class="help-card"><div class="help-card-title">GET /status</div><div class="help-card-desc">Service status, active incident ID, incident type, and configured thresholds.</div></div>
+          <div class="help-card"><div class="help-card-title">GET /metrics/history</div><div class="help-card-desc">Rolling 60-point metrics history for SLA baseline comparison.</div></div>
+          <div class="help-card"><div class="help-card-title">GET /alerts</div><div class="help-card-desc">All fired threshold alerts with type, value, and timestamp.</div></div>
+          <div class="help-card"><div class="help-card-title">GET /scenarios</div><div class="help-card-desc">Available failure scenarios with key, label, and description.</div></div>
+          <div class="help-card"><div class="help-card-title">POST /simulate-failure</div><div class="help-card-desc">Body: {"scenario": "deployment-regression"}. Activates incident with scenario-specific logs and metrics.</div></div>
+          <div class="help-card"><div class="help-card-title">POST /analyze</div><div class="help-card-desc">Runs 5-tool MCP pipeline. Returns root_cause, severity, explanation, suggested_fix, confidence, scenario.</div></div>
+        </div>
+      </div>
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);text-align:center;padding-top:8px">
+        NeuralOps v2.0 · Flask + Chart.js · Demo Mode (runs without backend)
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SCENARIO MODAL -->
+<div class="modal-overlay" id="scenarioModal" onclick="closeScenario(event)">
+  <div class="modal-box" style="max-width:520px">
+    <div class="modal-header">
+      <div class="modal-title"><span class="modal-title-icon">⚡</span> Choose Failure Scenario</div>
+      <button class="modal-close" onclick="closeScenarioDirect()">✕</button>
+    </div>
+    <div class="modal-body" style="gap:12px">
+      <div class="scenario-card" data-key="deployment-regression" onclick="selectScenario('deployment-regression')">
+        <div class="scenario-icon">⚙</div>
+        <div class="scenario-info">
+          <div class="scenario-name">Deployment Regression</div>
+          <div class="scenario-desc">HikariCP pool misconfiguration → DB connection exhaustion → circuit breaker trip. Affects: payments-api, db-primary.</div>
+          <div class="scenario-tags"><span class="stag critical">CRITICAL</span><span class="stag">payments-api</span><span class="stag">db-primary</span></div>
+        </div>
+      </div>
+      <div class="scenario-card" data-key="db-overload" onclick="selectScenario('db-overload')">
+        <div class="scenario-icon">🗄</div>
+        <div class="scenario-info">
+          <div class="scenario-name">Database Overload</div>
+          <div class="scenario-desc">Missing index causes full-table scans → CPU 98% → query queue backlog → cascade failures across services.</div>
+          <div class="scenario-tags"><span class="stag high">HIGH</span><span class="stag">db-primary</span><span class="stag">auth-service</span></div>
+        </div>
+      </div>
+      <div class="scenario-card" data-key="memory-leak" onclick="selectScenario('memory-leak')">
+        <div class="scenario-icon">💾</div>
+        <div class="scenario-info">
+          <div class="scenario-name">Memory Leak</div>
+          <div class="scenario-desc">Unbounded JWT session cache → heap growth → GC pauses → OOM → CrashLoopBackOff on auth pods.</div>
+          <div class="scenario-tags"><span class="stag high">HIGH</span><span class="stag">auth-service</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- NAVBAR -->
+<nav class="navbar" id="navbar">
+  <div class="nav-brand">
+    <span class="brand-icon">⬡</span>
+    <span class="brand-name">NeuralOps</span>
+    <span class="brand-tag">v2.0</span>
+  </div>
+  <div class="nav-center">
+    <div class="sys-clock" id="sysClock">--:--:--</div>
+    <div class="sla-badge" id="slaBadge" title="SLA compliance">SLA 99.97%</div>
+  </div>
+  <div class="nav-right">
+    <div class="health-indicator">
+      <div class="pulse-dot" id="pulseStatus"></div>
+      <span class="sys-label" id="systemLabel">SYSTEM HEALTHY</span>
+    </div>
+    <button class="btn-nav btn-scenario" id="btnScenario" onclick="openScenario()">
+      <span id="scenarioLabel">⚡ Deployment Regression</span>
+    </button>
+    <button class="btn-nav btn-sim" id="btnSimulate" onclick="simulateFailure()">Simulate</button>
+    <button class="btn-nav btn-resolve" id="btnResolve" onclick="resolveIncident()">✓ Resolve</button>
+    <button class="btn-nav btn-analyze" id="btnAnalyze" onclick="analyzeIncident()">🧠 Analyze</button>
+    <button class="btn-nav btn-theme" id="btnTheme" onclick="toggleTheme()" title="Toggle theme">◐</button>
+    <button class="btn-nav btn-help" onclick="openHelp()">?</button>
+  </div>
+</nav>
+
+<!-- INCIDENT BANNER -->
+<div class="incident-banner" id="incidentBanner">
+  <span class="banner-icon">🔴</span>
+  <span class="banner-text" id="bannerText">INCIDENT ACTIVE</span>
+  <span class="banner-id" id="bannerId"></span>
+  <span class="banner-time" id="bannerTime">00:00</span>
+</div>
+
+<!-- MAIN DASHBOARD -->
+<main class="dashboard">
+
+  <!-- SERVICE STATUS CARDS -->
+  <section class="status-row">
+    <div class="status-card" id="card-auth">
+      <div class="card-header">
+        <div class="card-dot" id="dot-auth"></div>
+        <div class="card-title">Auth Service</div>
+      </div>
+      <div class="card-latency-bar">
+        <div class="latency-fill" id="bar-auth" style="width:6%"></div>
+      </div>
+      <div class="card-footer">
+        <span class="card-value" id="val-auth">Healthy</span>
+        <span class="card-latency" id="lat-auth">12ms</span>
+      </div>
+    </div>
+    <div class="status-card" id="card-payments">
+      <div class="card-header">
+        <div class="card-dot" id="dot-payments"></div>
+        <div class="card-title">Payments API</div>
+      </div>
+      <div class="card-latency-bar">
+        <div class="latency-fill" id="bar-payments" style="width:17%"></div>
+      </div>
+      <div class="card-footer">
+        <span class="card-value" id="val-payments">Healthy</span>
+        <span class="card-latency" id="lat-payments">34ms</span>
+      </div>
+    </div>
+    <div class="status-card" id="card-db">
+      <div class="card-header">
+        <div class="card-dot" id="dot-db"></div>
+        <div class="card-title">Database</div>
+      </div>
+      <div class="card-latency-bar">
+        <div class="latency-fill" id="bar-db" style="width:4%"></div>
+      </div>
+      <div class="card-footer">
+        <span class="card-value" id="val-db">Healthy</span>
+        <span class="card-latency" id="lat-db">8ms</span>
+      </div>
+    </div>
+    <div class="status-card" id="card-cdn">
+      <div class="card-header">
+        <div class="card-dot" id="dot-cdn"></div>
+        <div class="card-title">CDN / Edge</div>
+      </div>
+      <div class="card-latency-bar">
+        <div class="latency-fill" id="bar-cdn" style="width:2.5%"></div>
+      </div>
+      <div class="card-footer">
+        <span class="card-value" id="val-cdn">Healthy</span>
+        <span class="card-latency" id="lat-cdn">5ms</span>
+      </div>
+    </div>
+    <div class="status-card" id="card-gateway">
+      <div class="card-header">
+        <div class="card-dot" id="dot-gateway"></div>
+        <div class="card-title">API Gateway</div>
+      </div>
+      <div class="card-latency-bar">
+        <div class="latency-fill" id="bar-gateway" style="width:10%"></div>
+      </div>
+      <div class="card-footer">
+        <span class="card-value" id="val-gateway">Healthy</span>
+        <span class="card-latency" id="lat-gateway">21ms</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- METRICS ROW -->
+  <section class="metrics-row">
+    <div class="metric-tile">
+      <div class="metric-label">Avg Latency</div>
+      <div class="metric-value" id="avgLatency">18ms</div>
+      <div class="metric-delta" id="latencyDelta">— baseline</div>
+      <div class="metric-sub" id="latencyTrend">↓ stable</div>
+    </div>
+    <div class="metric-tile">
+      <div class="metric-label">Error Rate</div>
+      <div class="metric-value" id="errorRate">0.4%</div>
+      <div class="metric-delta" id="errorDelta">— baseline</div>
+      <div class="metric-sub" id="errorTrend">↓ normal</div>
+    </div>
+    <div class="metric-tile">
+      <div class="metric-label">Uptime</div>
+      <div class="metric-value" id="uptime">99.97%</div>
+      <div class="metric-sub">last 30 days</div>
+    </div>
+    <div class="metric-tile">
+      <div class="metric-label">Requests / min</div>
+      <div class="metric-value" id="reqPerMin">1,240</div>
+      <div class="metric-sub" id="reqTrend">↑ live</div>
+    </div>
+    <div class="metric-tile">
+      <div class="metric-label">Active Incidents</div>
+      <div class="metric-value incident-count" id="incidentCount">0</div>
+      <div class="metric-sub" id="incidentSub">no issues</div>
+    </div>
+  </section>
+
+  <!-- CHART TABS + CHARTS -->
+  <section class="charts-section">
+    <div class="chart-tabs">
+      <button class="chart-tab active" data-tab="realtime" onclick="switchChartTab('realtime')">Real-time</button>
+      <button class="chart-tab" data-tab="comparison" onclick="switchChartTab('comparison')">vs SLA Baseline</button>
+    </div>
+
+    <div class="charts-row" id="tabRealtime">
+      <div class="chart-card">
+        <div class="chart-header">
+          <span class="chart-title">API Latency (ms)</span>
+          <span class="chart-badge" id="latencyBadge">LIVE</span>
+        </div>
+        <canvas id="latencyChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <span class="chart-title">Error Rate (%)</span>
+          <span class="chart-badge" id="errorBadge">LIVE</span>
+        </div>
+        <canvas id="errorChart"></canvas>
+      </div>
+    </div>
+
+    <div class="charts-row hidden" id="tabComparison">
+      <div class="chart-card">
+        <div class="chart-header">
+          <span class="chart-title">Latency vs SLA (300ms)</span>
+          <div class="chart-legend">
+            <span class="legend-dot cyan"></span>Current
+            <span class="legend-dot muted" style="margin-left:12px"></span>SLA Limit
+          </div>
+        </div>
+        <canvas id="latencyCmpChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <span class="chart-title">Error Rate vs Threshold (5%)</span>
+          <div class="chart-legend">
+            <span class="legend-dot green"></span>Current
+            <span class="legend-dot red" style="margin-left:12px"></span>Threshold
+          </div>
+        </div>
+        <canvas id="errorCmpChart"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOGS + TIMELINE -->
+  <section class="bottom-row">
+    <div class="logs-panel">
+      <div class="panel-header">
+        <span class="panel-title">Live System Logs</span>
+        <span class="log-count" id="logCount">0 entries</span>
+      </div>
+      <div class="log-filter-bar">
+        <button class="log-filter-btn all active-all" onclick="setLogFilter('ALL')">ALL</button>
+        <button class="log-filter-btn info"  onclick="setLogFilter('INFO')">INFO</button>
+        <button class="log-filter-btn warn"  onclick="setLogFilter('WARN')">WARN</button>
+        <button class="log-filter-btn error" onclick="setLogFilter('ERROR')">ERROR / CRIT</button>
+        <button class="log-filter-btn debug" onclick="setLogFilter('DEBUG')">DEBUG</button>
+      </div>
+      <div class="log-search-row">
+        <input type="text" class="log-search" id="logSearch" placeholder="Search logs..." oninput="renderLogs()"/>
+      </div>
+      <div class="logs-body" id="logsBody">
+        <div class="log-placeholder">Connecting to log stream...</div>
+      </div>
+    </div>
+
+    <div class="timeline-panel">
+      <div class="panel-header">
+        <span class="panel-title">Incident Timeline</span>
+        <span class="timeline-status" id="timelineStatus">Nominal</span>
+      </div>
+      <div class="timeline-body" id="timelineBody">
+        <div class="timeline-empty">No active incidents. System is healthy.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AI PANEL -->
+  <section class="ai-panel" id="aiPanel">
+    <div class="ai-header">
+      <span class="ai-icon">🤖</span>
+      <span class="ai-title">AI Root Cause Analysis</span>
+      <span class="ai-model">NeuralOps MCP Agent v2.0</span>
+    </div>
+    <div class="ai-thinking-steps" id="aiSteps"></div>
+    <div class="ai-body" id="aiBody">
+      <div class="ai-idle">
+        <div class="ai-idle-icon">◎</div>
+        <div class="ai-idle-text">Agent idle. Simulate a failure or click <strong>🧠 Analyze</strong> to start root cause diagnosis.<br><span style="color:var(--text-muted);font-size:10px">Pipeline: get_logs() → get_metrics() → get_deployments() → detect_anomaly() → analyze_incident()</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AI CHAT PANEL -->
+  <section class="chat-panel" id="chatPanel">
+    <div class="chat-header">
+      <div class="chat-header-left">
+        <span class="chat-icon">💬</span>
+        <div>
+          <div class="chat-title">AI Ops Assistant</div>
+          <div class="chat-subtitle">Ask anything about the incident, metrics, or remediation</div>
+        </div>
+      </div>
+      <div class="chat-header-right">
+        <div class="chat-status-dot" id="chatStatusDot"></div>
+        <span class="chat-status-label" id="chatStatusLabel">Ready</span>
+        <button class="chat-clear-btn" onclick="clearChat()" title="Clear conversation">⟳ Clear</button>
+      </div>
+    </div>
+
+    <div class="chat-suggestions" id="chatSuggestions">
+      <div class="suggestion-label">Quick asks:</div>
+      <div class="suggestion-chips">
+        <button class="chip" onclick="sendSuggestion('Explain the root cause in simple terms')">Explain root cause simply</button>
+        <button class="chip" onclick="sendSuggestion('What is the step-by-step remediation plan?')">Step-by-step fix</button>
+        <button class="chip" onclick="sendSuggestion('Which services are affected and how?')">Affected services</button>
+        <button class="chip" onclick="sendSuggestion('What kubectl commands should I run right now?')">kubectl commands</button>
+        <button class="chip" onclick="sendSuggestion('How can I prevent this in future?')">Prevention plan</button>
+        <button class="chip" onclick="sendSuggestion('What is the business impact of this incident?')">Business impact</button>
+        <button class="chip" onclick="sendSuggestion('Explain this like I am a junior engineer')">ELI junior dev</button>
+        <button class="chip" onclick="sendSuggestion('Write an incident report summary')">Incident report</button>
+      </div>
+    </div>
+
+    <div class="chat-messages" id="chatMessages">
+      <div class="chat-welcome">
+        <div class="chat-welcome-icon">◎</div>
+        <div class="chat-welcome-text">
+          I'm your AI Ops Assistant with full awareness of the current system state, metrics, logs, and analysis.<br>
+          <span style="color:var(--text-muted)">Simulate a failure, run analysis, then ask me anything.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-input-area">
+      <div class="chat-input-row">
+        <textarea class="chat-input" id="chatInput" placeholder="Ask about the incident, request explanations, get commands..." rows="1" onkeydown="handleChatKey(event)" oninput="autoResize(this)"></textarea>
+        <button class="chat-send-btn" id="chatSendBtn" onclick="sendChat()">
+          <span id="chatSendIcon">↑</span>
+        </button>
+      </div>
+      <div class="chat-input-hint">Enter to send · Shift+Enter for new line · Context-aware of current incident state</div>
+    </div>
+  </section>
+
+  <!-- DEPLOYMENTS -->
+  <section class="deployments-panel">
+    <div class="panel-header">
+      <span class="panel-title">Recent Deployments</span>
+      <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)" id="deployCount">—</span>
+    </div>
+    <div class="deployments-body" id="deploymentsBody">
+      <div class="log-placeholder">Loading deployment history...</div>
+    </div>
+  </section>
+
+</main>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
