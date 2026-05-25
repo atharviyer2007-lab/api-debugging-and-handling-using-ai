@@ -3,7 +3,7 @@ const API = 'http://127.0.0.1:5000';
 // ─── OpenRouter Key (works on GitHub, free) ────────────────────────
 // Get free key at https://openrouter.ai → API Keys
 // Paste your key below (starts with sk-or-v1-...)
-const OPENROUTER_KEY = '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';
+const OPENROUTER_KEY = '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';
 
 // ─── State ─────────────────────────────────────────────────────────
 let latencyHistory  = Array.from({length:20}, () => Math.floor(Math.random()*30)+10);
