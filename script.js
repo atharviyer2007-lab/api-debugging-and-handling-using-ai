@@ -3,7 +3,7 @@ const API = 'http://127.0.0.1:5000';
 // ─── Gemini Key (works on GitHub, 100% free, no credit card) ───────
 // Get free key at https://aistudio.google.com → Get API Key
 // Paste your key below (starts with AIza...)
-const GEMINI_KEY = 'AIzaSyDothRWRTUm_hlHDtyC_DY2LcdQ_hZCrTU';
+const GEMINI_KEY = 'AIzaSyDdYm4FpT559XvONFqvP_9XyyxdrzI1PUo';
 
 // ─── State ─────────────────────────────────────────────────────────
 let latencyHistory  = Array.from({length:20}, () => Math.floor(Math.random()*30)+10);
