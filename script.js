@@ -2,7 +2,8 @@ const API = 'http://127.0.0.1:5000';
 
 // ─── Gemini Key (works on GitHub, 100% free, no credit card) ───────
 // Get free key at https://aistudio.google.com → Get API Key
-const GEMINI_KEY = 'AIzaSyCMqHGdCwRmNvYZecddFspALU9FJrngzTo';
+// Paste your key below (starts with AIza...)
+const GEMINI_KEY = 'AIzaSyClI6jbnulr_6T08hrNpn26M-HmT8F42ZQ';
 
 // ─── State ─────────────────────────────────────────────────────────
 let latencyHistory  = Array.from({length:20}, () => Math.floor(Math.random()*30)+10);
@@ -944,7 +945,7 @@ async function sendChat() {
     }
     geminiMsgs.push({ role: 'user', parts: [{ text: text }] });
 
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + GEMINI_KEY;
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + GEMINI_KEY;
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
